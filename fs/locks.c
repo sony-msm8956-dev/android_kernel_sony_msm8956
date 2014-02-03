@@ -1651,7 +1651,7 @@ EXPORT_SYMBOL(generic_setlease);
 
 static int __vfs_setlease(struct file *filp, long arg, struct file_lock **lease)
 {
-	if (filp->f_op && filp->f_op->setlease)
+	if (filp->f_op->setlease)
 		return filp->f_op->setlease(filp, arg, lease);
 	else
 		return generic_setlease(filp, arg, lease);
@@ -1843,7 +1843,7 @@ SYSCALL_DEFINE2(flock, unsigned int, fd, unsigned int, cmd)
 	if (error)
 		goto out_free;
 
-	if (f.file->f_op && f.file->f_op->flock)
+	if (f.file->f_op->flock)
 		error = f.file->f_op->flock(f.file,
 					  (can_sleep) ? F_SETLKW : F_SETLK,
 					  lock);
@@ -1869,7 +1869,7 @@ SYSCALL_DEFINE2(flock, unsigned int, fd, unsigned int, cmd)
  */
 int vfs_test_lock(struct file *filp, struct file_lock *fl)
 {
-	if (filp->f_op && filp->f_op->lock)
+	if (filp->f_op->lock)
 		return filp->f_op->lock(filp, F_GETLK, fl);
 	posix_test_lock(filp, fl);
 	return 0;
@@ -1929,6 +1929,12 @@ int fcntl_getlk(struct file *filp, unsigned int cmd, struct flock __user *l)
 	if (error)
 		goto out;
 
+	if (cmd == F_GETLKP) {
+		cmd = F_GETLK;
+		file_lock.fl_flags |= FL_FILE_PVT;
+		file_lock.fl_owner = (fl_owner_t)filp;
+	}
+
 	error = vfs_test_lock(filp, &file_lock);
 	if (error)
 		goto out;
@@ -1981,7 +1987,7 @@ out:
  */
 int vfs_lock_file(struct file *filp, unsigned int cmd, struct file_lock *fl, struct file_lock *conf)
 {
-	if (filp->f_op && filp->f_op->lock)
+	if (filp->f_op->lock)
 		return filp->f_op->lock(filp, cmd, fl);
 	else
 		return posix_lock_file(filp, fl, conf);
@@ -2047,10 +2053,26 @@ int fcntl_setlk(unsigned int fd, struct file *filp, unsigned int cmd,
 	error = flock_to_posix_lock(filp, file_lock, &flock);
 	if (error)
 		goto out;
-	if (cmd == F_SETLKW) {
+
+	/*
+	 * If the cmd is requesting file-private locks, then set the
+	 * FL_FILE_PVT flag and override the owner.
+	 */
+	switch (cmd) {
+	case F_SETLKP:
+		cmd = F_SETLK;
+		file_lock->fl_flags |= FL_FILE_PVT;
+		file_lock->fl_owner = (fl_owner_t)filp;
+		break;
+	case F_SETLKPW:
+		cmd = F_SETLKW;
+		file_lock->fl_flags |= FL_FILE_PVT;
+		file_lock->fl_owner = (fl_owner_t)filp;
+		/* Fallthrough */
+	case F_SETLKW:
 		file_lock->fl_flags |= FL_SLEEP;
 	}
-	
+
 	error = do_lock_file_wait(filp, cmd, file_lock);
 
 	/*
@@ -2098,6 +2120,12 @@ int fcntl_getlk64(struct file *filp, unsigned int cmd, struct flock64 __user *l)
 	error = flock64_to_posix_lock(filp, &file_lock, &flock);
 	if (error)
 		goto out;
+
+	if (cmd == F_GETLKP) {
+		cmd = F_GETLK64;
+		file_lock.fl_flags |= FL_FILE_PVT;
+		file_lock.fl_owner = (fl_owner_t)filp;
+	}
 
 	error = vfs_test_lock(filp, &file_lock);
 	if (error)
@@ -2150,10 +2178,26 @@ int fcntl_setlk64(unsigned int fd, struct file *filp, unsigned int cmd,
 	error = flock64_to_posix_lock(filp, file_lock, &flock);
 	if (error)
 		goto out;
-	if (cmd == F_SETLKW64) {
+
+	/*
+	 * If the cmd is requesting file-private locks, then set the
+	 * FL_FILE_PVT flag and override the owner.
+	 */
+	switch (cmd) {
+	case F_SETLKP:
+		cmd = F_SETLK64;
+		file_lock->fl_flags |= FL_FILE_PVT;
+		file_lock->fl_owner = (fl_owner_t)filp;
+		break;
+	case F_SETLKPW:
+		cmd = F_SETLKW64;
+		file_lock->fl_flags |= FL_FILE_PVT;
+		file_lock->fl_owner = (fl_owner_t)filp;
+		/* Fallthrough */
+	case F_SETLKW64:
 		file_lock->fl_flags |= FL_SLEEP;
 	}
-	
+
 	error = do_lock_file_wait(filp, cmd, file_lock);
 
 	/*
@@ -2229,7 +2273,9 @@ void locks_remove_file(struct file *filp)
 	if (!inode->i_flock)
 		return;
 
-	if (filp->f_op && filp->f_op->flock) {
+	locks_remove_posix(filp, (fl_owner_t)filp);
+
+	if (filp->f_op->flock) {
 		struct file_lock fl = {
 			.fl_pid = current->tgid,
 			.fl_file = filp,
@@ -2305,7 +2351,7 @@ EXPORT_SYMBOL(posix_unblock_lock);
  */
 int vfs_cancel_lock(struct file *filp, struct file_lock *fl)
 {
-	if (filp->f_op && filp->f_op->lock)
+	if (filp->f_op->lock)
 		return filp->f_op->lock(filp, F_CANCELLK, fl);
 	return 0;
 }
