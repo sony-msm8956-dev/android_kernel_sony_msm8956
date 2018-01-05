@@ -3735,6 +3735,18 @@ static int binder_free_thread(struct binder_proc *proc,
 		} else
 			BUG();
 	}
+
+	/*
+	 * If this thread used poll, make sure we remove the waitqueue
+	 * from any epoll data structures holding it with POLLFREE.
+	 * waitqueue_active() is safe to use here because we're holding
+	 * the global lock.
+	 */
+	if ((thread->looper & BINDER_LOOPER_STATE_POLL) &&
+	    waitqueue_active(&thread->wait)) {
+		wake_up_poll(&thread->wait, POLLHUP | POLLFREE);
+	}
+
 	binder_release_work(&thread->todo);
 	INIT_HLIST_NODE(&thread->zombie_thread);
 	hlist_add_head(&thread->zombie_thread, &proc->zombie_threads);
