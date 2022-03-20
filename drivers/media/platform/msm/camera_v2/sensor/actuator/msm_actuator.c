@@ -1191,8 +1191,7 @@ static int32_t msm_actuator_set_position(
 	}
 
 	if (!a_ctrl || !a_ctrl->func_tbl ||
-		!a_ctrl->func_tbl->actuator_parse_i2c_params ||
-		!a_ctrl->i2c_reg_tbl) {
+		!a_ctrl->func_tbl->actuator_parse_i2c_params) {
 		pr_err("failed. NULL actuator pointers.");
 		return -EFAULT;
 	}

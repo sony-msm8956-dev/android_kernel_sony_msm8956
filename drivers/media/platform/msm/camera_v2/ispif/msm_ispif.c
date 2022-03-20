@@ -1306,11 +1306,7 @@ static inline void msm_ispif_read_irq_status(struct ispif_irq_status *out,
 
 		ispif_process_irq(ispif, out, VFE0);
 	}
-#if defined(CONFIG_SONY_CAM_V4L2)
-	if (ispif->vfe_info.num_vfe > 1) {
-#else
 	if (ispif->hw_num_isps > 1) {
-#endif
 		if (out[VFE1].ispifIrqStatus0 & RESET_DONE_IRQ) {
 			if (atomic_dec_and_test(&ispif->reset_trig[VFE1]))
 				complete(&ispif->reset_complete[VFE1]);
@@ -1641,9 +1637,6 @@ static int ispif_probe(struct platform_device *pdev)
 		if (rc)
 			/* backward compatibility */
 			ispif->hw_num_isps = 1;
-#if defined(CONFIG_SONY_CAM_V4L2)
-		ispif->vfe_info.num_vfe = ispif->hw_num_isps;
-#endif
 		/* not an error condition */
 		rc = 0;
 	}
